@@ -29,6 +29,7 @@ namespace ProxyGen
 
             var compilationUnit = SyntaxFactory.CompilationUnit()
                 .AddUsings(definition.UsingDirectives.ToArray())
+                .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("Core.Interfaces.Wrappers")))
                 .AddMembers(nameSpace);
 
             var proxy = new CreatedProxy
@@ -59,7 +60,7 @@ namespace ProxyGen
             var constructor = SyntaxFactory.ConstructorDeclaration(name.ClassName)
                 .WithModifiers(SyntaxTokenList.Create(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
                 .WithParameterList(SyntaxFactory.ParameterList(paramList))
-                .WithBody(SyntaxFactory.Block( statement ));
+                .WithBody(SyntaxFactory.Block(statement));
 
             return constructor;
         }
@@ -94,40 +95,40 @@ namespace ProxyGen
                 if (asMethod == null) continue;
 
                 var selfName = interfaceMethod.ChildTokens().First(x => x.IsKind(SyntaxKind.IdentifierToken)).ValueText;
-                var selfArgs = interfaceMethod.ChildNodes().Where(x => x.IsKind(SyntaxKind.ParameterList)).ToList();
-                methods.Add(GenerateProxyMethod(toCall, selfName, selfArgs, asMethod.ReturnType.WithoutTrivia()));
+
+                var selfParams = SyntaxFactory.ParameterList();
+                if (interfaceMethod.ChildNodes().Any(IsParamList))
+                {
+                    var argList = interfaceMethod.ChildNodes().First(IsParamList);
+                    var paramList = argList as ParameterListSyntax;
+                    if (paramList != null)
+                        selfParams = paramList;
+                }
+
+                methods.Add(GenerateProxyMethod(toCall, selfName, selfParams, asMethod.ReturnType.WithoutTrivia()));
             }
 
             return methods;
         }
 
         private MethodDeclarationSyntax GenerateProxyMethod(string callingClassName, string callingMethodName,
-            List<SyntaxNode> selfArgs, TypeSyntax returnType)
+            ParameterListSyntax selfArgs, TypeSyntax returnType)
         {
             var callingClass = SyntaxFactory.IdentifierName(callingClassName);
             var callingMethod = SyntaxFactory.IdentifierName(callingMethodName);
             var configAwait = SyntaxFactory.IdentifierName("ConfigureAwait");
             var dotToken = SyntaxFactory.Token(SyntaxKind.DotToken);
 
-            var paramList = SyntaxFactory.ParameterList();
-
-            foreach (var syntaxNode in selfArgs)
-            {
-                var s = syntaxNode as ParameterListSyntax;
-                if (s == null)
-                    continue;
-
-                paramList = s;
-            }
-
             var argumentList = SyntaxFactory.ArgumentList();
 
-            if (paramList.Parameters.Any())
+            if (selfArgs.Parameters.Any())
             {
-                argumentList = SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
-                    SyntaxFactory.Argument(
-                        SyntaxFactory.IdentifierName(paramList.Parameters.First().Identifier.ValueText))
-                    ));
+                var argumentSyntaxs = selfArgs.Parameters
+                    .Select(CreateArgument)
+                    .ToList();
+
+                var separatedList = SyntaxFactory.SeparatedList(argumentSyntaxs);
+                argumentList = SyntaxFactory.ArgumentList(separatedList);
             }
 
             var mainCall = SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, callingClass,
@@ -139,7 +140,7 @@ namespace ProxyGen
             var falseBool = SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression));
             var configAwaitArgs = SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[] {falseBool}));
 
-            var executeWithTimeout = SyntaxFactory.IdentifierName("Core.Interfaces.Wrappers.ServicePolicy");
+            var executeWithTimeout = SyntaxFactory.IdentifierName("ServicePolicy");
 
             var executeArgs = SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
                 SyntaxFactory.Argument(SyntaxFactory.ParenthesizedLambdaExpression(mainCallInvoke))));
@@ -163,10 +164,20 @@ namespace ProxyGen
             var method = SyntaxFactory.MethodDeclaration(returnType, callingMethodName)
                 .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
                 .AddModifiers(SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
-                .WithParameterList(paramList)
+                .WithParameterList(selfArgs)
                 .WithBody(bodyBlock);
 
             return method;
+        }
+
+        private static ArgumentSyntax CreateArgument(ParameterSyntax parameterSyntax)
+        {
+            return SyntaxFactory.Argument(SyntaxFactory.IdentifierName(parameterSyntax.Identifier.ValueText));
+        }
+
+        private static bool IsParamList(SyntaxNode x)
+        {
+            return x.IsKind(SyntaxKind.ParameterList);
         }
     }
 }
