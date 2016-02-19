@@ -29,7 +29,6 @@ namespace ProxyGen
 
             var compilationUnit = SyntaxFactory.CompilationUnit()
                 .AddUsings(definition.UsingDirectives.ToArray())
-                .AddUsings(SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName("Core.Interfaces.Wrappers")))
                 .AddMembers(nameSpace);
 
             var proxy = new CreatedProxy
