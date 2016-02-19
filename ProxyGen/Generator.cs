@@ -12,15 +12,12 @@ namespace ProxyGen
         public CreatedProxy Generate(InterfaceDefinition definition)
         {
             var name = new NameObject(definition);
-            var classNameBase = definition.InterfaceName.Substring(1, definition.InterfaceName.Length - 1);
-            var className = $"{classNameBase}Proxy";
+
             var constructor = CreateConstructor(name);
-
             var privateMembers = CreatePrivateMembers(name);
-
             var proxyMethods = GenerateProxyMethods(definition.InterfaceMethods, name.PrivateName);
 
-            var classDecl = SyntaxFactory.ClassDeclaration(className)
+            var classDecl = SyntaxFactory.ClassDeclaration(name.ClassName)
                 .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
                 .AddBaseListTypes(SyntaxFactory.SimpleBaseType(SyntaxFactory.ParseTypeName(definition.InterfaceName)))
                 .AddMembers(privateMembers.ToArray())
@@ -38,7 +35,7 @@ namespace ProxyGen
             var proxy = new CreatedProxy
             {
                 CompilationUnitSyntax = compilationUnit,
-                Name = className
+                Name = name.ClassName
             };
 
             return proxy;
@@ -54,27 +51,22 @@ namespace ProxyGen
 
             paramList = paramList.Add(parameter);
 
-            var statements = new List<StatementSyntax>();
-
             var statement = SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(
                 SyntaxKind.SimpleAssignmentExpression,
                 SyntaxFactory.IdentifierName(name.PrivateName),
                 SyntaxFactory.IdentifierName(name.ConstructorArgName))
                 .WithOperatorToken(SyntaxFactory.Token(SyntaxKind.EqualsToken)));
 
-            statements.Add(statement);
-
             var constructor = SyntaxFactory.ConstructorDeclaration(name.ClassName)
                 .WithModifiers(SyntaxTokenList.Create(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
                 .WithParameterList(SyntaxFactory.ParameterList(paramList))
-                .WithBody(SyntaxFactory.Block(statements));
+                .WithBody(SyntaxFactory.Block( statement ));
 
             return constructor;
         }
 
         private List<MemberDeclarationSyntax> CreatePrivateMembers(NameObject name)
         {
-            var members = new List<MemberDeclarationSyntax>();
             var privateReadonlyModifiers = SyntaxFactory.TokenList(
                 SyntaxFactory.Token(SyntaxKind.PrivateKeyword),
                 SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword));
@@ -88,8 +80,7 @@ namespace ProxyGen
                     SyntaxFactory.SingletonSeparatedList(SyntaxFactory.VariableDeclarator(diPrivateIdentifier))))
                 .WithModifiers(privateReadonlyModifiers);
 
-            members.Add(privateMember);
-
+            var members = new List<MemberDeclarationSyntax> {privateMember};
             return members;
         }
 
