@@ -34,6 +34,8 @@ namespace ProxyGen
             foreach (var documentId in interfaceProject.DocumentIds)
             {
                 var document = newSolution.GetDocument(documentId);
+                if(document.Name.Contains("IResolveServiceReferences"))
+                    continue;
 
                 Console.WriteLine($"Reading {document.Name}");
                 var documentSyntaxRoot = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
